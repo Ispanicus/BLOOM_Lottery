@@ -1,7 +1,10 @@
-from transformers import pipeline
+from transformers import BloomTokenizerFast, pipeline
+from datasets import load_dataset
+
+tokenizer = BloomTokenizerFast.from_pretrained("bigscience/bloom")
 
 name = "bigscience/bloom-7b1"
-text = "Hello my name is"
+text = 'What is the Capital of France?\nAnswer: '
 max_new_tokens = 20
 
 def generate_from_model(model, tokenizer):
@@ -11,6 +14,10 @@ def generate_from_model(model, tokenizer):
 
 pipe = pipeline(model=name, model_kwargs= {"device_map": "auto", "load_in_8bit": True}, max_new_tokens=max_new_tokens)
 
-text = 'What is the Capital of France?\nAnswer: '
-
 print(pipe(text))
+
+dataset = load_dataset("xtreme", "MLQA.en.es")
+
+tokenized_dataset = dataset.map(lambda x: tokenizer(x['context']), batched=True)
+
+tokenized_dataset['validation']['answers']
