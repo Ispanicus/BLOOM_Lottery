@@ -1,0 +1,16 @@
+#!/bin/bash
+
+#SBATCH --account=researchers
+#SBATCH --job-name=installtest        # Job name
+#SBATCH --output=../outfiles/%x.%j.out  
+#SBATCH --error=../outfiles/%x.%j.err
+#SBATCH --cpus-per-task=1        # Schedule one core
+#SBATCH --time=00:15:00          # Run time (hh:mm:ss) - run for one hour max
+#SBATCH --gres=gpu
+#SBATCH --partition=brown
+# Print out the hostname of the node the job is running on
+hostname
+# module load Anaconda3
+source activate torchenv
+# python3 install_test.py
+python3 -c "import torch; print(torch.cuda.get_device_name(0))"
