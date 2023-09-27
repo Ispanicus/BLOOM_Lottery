@@ -1,12 +1,27 @@
 from transformers import BloomTokenizerFast, pipeline, AutoModel
 from get_dataset import get_dataset
-#import NeuroSurgeon
-#from NeuroSurgeon.Models import model_configs, circuit_model
+import NeuroSurgeon
+from NeuroSurgeon.Models import model_configs, circuit_model
 import torch
 import transformers
 from copy import deepcopy
 from tqdm import tqdm
+import random
 
+def loss_fn(logits, labels):
+    # Defining our own loss function so loss is only computed on label tokens
+    index_logits = logits[:, -3]
+    index_logits = index_logits.to(torch.float64)
+    log_probs = index_logits.log_softmax(dim=-1)
+
+    correct_log_probs_0 = log_probs.gather(dim=-1, index=labels[:, 0, None])[:, 0]
+
+    index_logits = logits[:, -2]
+    index_logits = index_logits.to(torch.float64)
+    log_probs = index_logits.log_softmax(dim=-1)
+    correct_log_probs_1 = log_probs.gather(dim=-1, index=labels[:, 1, None])[:, 0]
+
+    return -(correct_log_probs_0 + correct_log_probs_1).mean()
 
 tokenizer = BloomTokenizerFast.from_pretrained("bigscience/bloom")
 
@@ -16,7 +31,28 @@ model_1 = deepcopy(model)
 
 filtered_dataset = get_dataset()
 
-tokenized_dataset = filtered_dataset.map(lambda x: tokenizer(x['context']), batched=True)
+tokenized_dataset = tokenizer(" ".join(filtered_dataset['text']), return_tensors='pt')
+
+seqlen = 2048
+nsamples = 128
+
+trainloader = []
+for _ in range(nsamples):
+    i = random.randint(0, tokenized_dataset.input_ids.shape[1] - seqlen - 1)
+    j = i + seqlen
+    inp = tokenized_dataset.input_ids[:, i:j]
+    tar = inp.clone()
+    tar[:, :-1] = -100
+    trainloader.append((inp, tar))
+
+
+train_inputs = [x[0].squeeze() for x in trainloader]
+train_labels = [x[1].squeeze() for x in trainloader]
+
+train_inputs = torch.stack(train_inputs).to("cuda")
+train_labels = torch.stack(train_labels).to("cuda")
+
+#tokenized_dataset = filtered_dataset.map(lambda x: tokenizer(x['text']), batched=True)
 
 target_layers = list(model_1.state_dict().keys())
 target_layers = [
@@ -53,8 +89,8 @@ checkpoint_every = 50
 
 progress_bar = tqdm(range(NUM_EPOCHS))
 for epoch in range(NUM_EPOCHS):
-    train_logits = circuit_model_1(input_ids=train_add_inputs).logits
-    train_loss = loss_fn(train_logits, train_add_labels) + \
+    train_logits = circuit_model_1(input_ids=train_inputs).logits
+    train_loss = loss_fn(train_logits, train_labels) + \
       (config.l0_lambda * circuit_model_1._compute_l0_loss()) # Manually adding L0 Loss
     train_loss.backward()
     train_losses.append(train_loss.cpu().item())
@@ -64,11 +100,14 @@ for epoch in range(NUM_EPOCHS):
 
     if epoch % checkpoint_every == 0:
       with torch.inference_mode():
-        test_logits = circuit_model_1(input_ids=test_add_inputs).logits
-        test_loss = loss_fn(test_logits, test_add_labels)
+        test_logits = circuit_model_1(input_ids=train_inputs).logits
+        test_loss = loss_fn(test_logits, train_labels)
         test_losses.append(test_loss)
         progress_bar.set_description(f"Test Loss {test_loss} " +\
           f"L0 {circuit_model_1._compute_l0_loss()}")
+
+
+
 
 #####
 name = "bigscience/bloom-7b1"
