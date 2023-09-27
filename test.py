@@ -1,4 +1,4 @@
-from transformers import BloomTokenizerFast, pipeline, AutoModel
+from transformers import BloomTokenizerFast, pipeline, BloomForCausalLM
 from get_dataset import get_dataset
 import NeuroSurgeon
 from NeuroSurgeon.Models import model_configs, circuit_model
@@ -25,7 +25,7 @@ def loss_fn(logits, labels):
 
 tokenizer = BloomTokenizerFast.from_pretrained("bigscience/bloom")
 
-model = AutoModel.from_pretrained("bigscience/bloom-560m")
+model = BloomForCausalLM.from_pretrained("bigscience/bloom-560m")
 
 model_1 = deepcopy(model)
 
@@ -33,8 +33,8 @@ filtered_dataset = get_dataset()
 
 tokenized_dataset = tokenizer(" ".join(filtered_dataset['text']), return_tensors='pt')
 
-seqlen = 2048
-nsamples = 128
+seqlen = 1024
+nsamples = 4
 
 trainloader = []
 for _ in range(nsamples):
@@ -60,7 +60,9 @@ target_layers = [
     for target_layer in target_layers
     if (".h." in target_layer
     and "weight" in target_layer
-    and "ln" not in target_layer)
+    and "ln" not in target_layer
+    and "layernorm" not in target_layer
+    )
     or ("lm_head" in target_layer)
 ]
 
@@ -69,7 +71,7 @@ config = model_configs.CircuitConfig(
     mask_hparams = {
         "ablation": "none", # Don't invert the learned mask
         "mask_bias": False, # Don't mask biases
-        "prune_percentage": 10.0
+        "prune_percentage": 0.1, # Prune 10% of the weights
     },
     target_layers=target_layers, # Replace the layers specified above
     freeze_base=True, # Don't train the model weights when training the mask
@@ -80,12 +82,12 @@ config = model_configs.CircuitConfig(
 circuit_model_1 = circuit_model.CircuitModel(config, model_1).to("cuda")
 optimizer = torch.optim.AdamW(circuit_model_1.parameters(), lr=0.01)
 
-NUM_EPOCHS = 3000
+NUM_EPOCHS = 10
 FINAL_TEMP = 200
 
 train_losses = []
 test_losses = []
-checkpoint_every = 50
+checkpoint_every = 5
 
 progress_bar = tqdm(range(NUM_EPOCHS))
 for epoch in range(NUM_EPOCHS):
