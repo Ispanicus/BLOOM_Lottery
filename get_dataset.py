@@ -6,7 +6,7 @@ def get_dataset():
     with open ('wiki.txt', 'r') as file:
         urls = [line.strip() for line in file.readlines()]
         urls = set(urls)
-    urls
+
     indices = []
 
     for i, url in enumerate(dataset['train']['url']):

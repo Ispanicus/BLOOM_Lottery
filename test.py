@@ -1,12 +1,12 @@
-from transformers import BloomTokenizerFast, pipeline, BloomForCausalLM
+from transformers import AutoTokenizer, pipeline, AutoModelForCausalLM
 from get_dataset import get_dataset
-import NeuroSurgeon
-from NeuroSurgeon.Models import model_configs, circuit_model
 import torch
 import transformers
 from copy import deepcopy
 from tqdm import tqdm
 import random
+import NeuroSurgeon
+from NeuroSurgeon.Models import model_configs, circuit_model
 
 def loss_fn(logits, labels):
     # Defining our own loss function so loss is only computed on label tokens
@@ -23,9 +23,9 @@ def loss_fn(logits, labels):
 
     return -(correct_log_probs_0 + correct_log_probs_1).mean()
 
-tokenizer = BloomTokenizerFast.from_pretrained("bigscience/bloom")
+tokenizer = AutoTokenizer.from_pretrained("bigscience/bloom-560m")
 
-model = BloomForCausalLM.from_pretrained("bigscience/bloom-560m")
+model = AutoModelForCausalLM.from_pretrained("bigscience/bloom-560m")
 
 model_1 = deepcopy(model)
 
